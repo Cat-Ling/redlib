@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::atomic::Ordering, time::Duration};
 
 use crate::{
-	client::{CLIENT, OAUTH_CLIENT, OAUTH_IS_ROLLING_OVER, OAUTH_RATELIMIT_REMAINING},
+	client::{CLIENT, OAUTH_CLIENT, OAUTH_IS_ROLLING_OVER, OAUTH_RATELIMIT_REMAINING, DEVICE},
 	oauth_resources::ANDROID_APP_VERSION_LIST,
 };
 use base64::{engine::general_purpose, Engine as _};
@@ -28,11 +28,12 @@ pub struct Oauth {
 }
 
 impl Oauth {
-	/// Create a new OAuth client
-	pub(crate) async fn new() -> Self {
+
+	/// Create a new OAuth client with a specific device
+	pub(crate) async fn new(device: Device) -> Self {
 		// Call new_internal until it succeeds
 		loop {
-			let attempt = Self::new_with_timeout().await;
+			let attempt = Self::new_with_timeout(device.clone()).await;
 			match attempt {
 				Ok(Ok(oauth)) => {
 					info!("[✅] Successfully created OAuth client");
@@ -55,14 +56,12 @@ impl Oauth {
 		}
 	}
 
-	async fn new_with_timeout() -> Result<Result<Self, AuthError>, Elapsed> {
-		let mut oauth = Self::default();
+	async fn new_with_timeout(device: Device) -> Result<Result<Self, AuthError>, Elapsed> {
+		let mut oauth = Self::from_device(device);
 		timeout(OAUTH_TIMEOUT, oauth.login()).await.map(|result: Result<(), AuthError>| result.map(|_| oauth))
 	}
 
-	pub(crate) fn default() -> Self {
-		// Generate a device to spoof
-		let device = Device::new();
+	pub(crate) fn from_device(device: Device) -> Self {
 		let headers_map = device.headers.clone();
 		let initial_headers = device.initial_headers.clone();
 		// For now, just insert headers - no token request
@@ -198,17 +197,22 @@ pub async fn force_refresh_token() {
 	}
 
 	trace!("Rolling over refresh token. Current rate limit: {}", OAUTH_RATELIMIT_REMAINING.load(Ordering::SeqCst));
-	let new_client = Oauth::new().await;
+
+	let new_device = Device::new();
+	DEVICE.swap(new_device.clone().into());
+	
+	let new_client = Oauth::new(new_device).await;
 	OAUTH_CLIENT.swap(new_client.into());
 	OAUTH_RATELIMIT_REMAINING.store(99, Ordering::SeqCst);
 	OAUTH_IS_ROLLING_OVER.store(false, Ordering::SeqCst);
 }
 
 #[derive(Debug, Clone, Default)]
-struct Device {
+pub struct Device {
 	oauth_id: String,
 	initial_headers: HashMap<String, String>,
 	headers: HashMap<String, String>,
+	user_agent: String,
 }
 
 impl Device {
@@ -230,7 +234,7 @@ impl Device {
 
 		// Android device headers
 		let headers: HashMap<String, String> = HashMap::from([
-			("User-Agent".into(), android_user_agent),
+			("User-Agent".into(), android_user_agent.clone()),
 			("x-reddit-retry".into(), "algo=no-retries".into()),
 			("x-reddit-compression".into(), "1".into()),
 			("x-reddit-qos".into(), qos),
@@ -246,11 +250,17 @@ impl Device {
 			oauth_id: REDDIT_ANDROID_OAUTH_CLIENT_ID.to_string(),
 			headers: headers.clone(),
 			initial_headers: headers,
+			user_agent: android_user_agent,
 		}
 	}
-	fn new() -> Self {
+	
+	pub fn new() -> Self {
 		// See https://github.com/redlib-org/redlib/issues/8
 		Self::android()
+	}
+
+	pub fn user_agent(&self) -> &str {
+		&self.user_agent
 	}
 }
 

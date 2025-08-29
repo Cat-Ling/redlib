@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, AtomicU16};
 use std::{io, result::Result};
 
 use crate::dbg_msg;
-use crate::oauth::{force_refresh_token, token_daemon, Oauth};
+use crate::oauth::{force_refresh_token, token_daemon, Oauth, Device};
 use crate::server::RequestExt;
 use crate::utils::{format_url, Post};
 
@@ -35,8 +35,13 @@ pub static HTTPS_CONNECTOR: Lazy<HttpsConnector<HttpConnector>> =
 
 pub static CLIENT: Lazy<Client<HttpsConnector<HttpConnector>>> = Lazy::new(|| Client::builder().build::<_, Body>(HTTPS_CONNECTOR.clone()));
 
+pub static DEVICE: Lazy<ArcSwap<Device>> = Lazy::new(|| {
+	ArcSwap::new(Device::new().into())
+});
+
 pub static OAUTH_CLIENT: Lazy<ArcSwap<Oauth>> = Lazy::new(|| {
-	let client = block_on(Oauth::new());
+	let device = DEVICE.load_full();
+	let client = block_on(Oauth::new(device.as_ref().clone()));
 	tokio::spawn(token_daemon());
 	ArcSwap::new(client.into())
 });
@@ -163,6 +168,12 @@ async fn stream(url: &str, req: &Request<Body>) -> Result<Response<Body>, String
 		if let Some(value) = req.headers().get(key) {
 			builder = builder.header(key, value);
 		}
+	}
+
+	// Add User-Agent header of the currently spoofed device
+	{
+		let device = DEVICE.load_full();
+		builder = builder.header("User-Agent", device.user_agent());
 	}
 
 	let stream_request = builder.body(Body::empty()).map_err(|_| "Couldn't build empty body in stream".to_string())?;
