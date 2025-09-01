@@ -8,7 +8,7 @@ on:
   workflow_dispatch: # manual trigger
 
 env:
-  REGISTRY_IMAGE: ghcr.io/Cat-Ling/redlib
+  REGISTRY_IMAGE: ghcr.io/cat-ling/redlib
 
 jobs:
   build-and-push:
