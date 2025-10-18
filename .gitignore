@@ -8,3 +8,7 @@ redlib.toml
 # nix files
 .direnv/
 result
+
+# Go artifacts
+catlib/catlib
+catlib/go.sum
