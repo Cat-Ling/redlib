@@ -146,7 +146,7 @@ func forceRefreshToken() {
 	log.Printf("Rolling over refresh token. Current rate limit: %d", atomic.LoadUint32(&oauthRatelimitRemaining))
 
 	newDevice := newDevice()
-	device.Store(newDevice)
+	device.Store(&newDevice)
 
 	newClient := newOauth(newDevice)
 	oauthClient.Store(newClient)
@@ -156,7 +156,12 @@ func forceRefreshToken() {
 // newDevice creates a new spoofed Android device.
 func newDevice() Device {
 	id := uuid.New().String()
-	androidAppVersion := androidAppVersionList[rand.Intn(len(androidAppVersionList))]
+	var androidAppVersion string
+	if len(androidAppVersionList) > 0 {
+		androidAppVersion = androidAppVersionList[rand.Intn(len(androidAppVersionList))]
+	} else {
+		androidAppVersion = "2023.43.0/Build 1257426"
+	}
 	androidVersion := rand.Intn(6) + 9 // 9-14
 	userAgent := fmt.Sprintf("Reddit/%s/Android %d", androidAppVersion, androidVersion)
 	qos := float32(rand.Intn(99001)+1000) / 1000.0
@@ -189,7 +194,7 @@ var (
 func initializeOAuth() {
 	oauthClientOnce.Do(func() {
 		d := newDevice()
-		device.Store(d)
+		device.Store(&d)
 		oc := newOauth(d)
 		oauthClient.Store(oc)
 		go tokenDaemon()

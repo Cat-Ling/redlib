@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"net/http"
@@ -118,11 +119,13 @@ func postItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid post data", http.StatusInternalServerError)
 		return
 	}
-	post, err := parsePost(postData["data"].(map[string]interface{})["children"].([]interface{})[0])
+
+	post, err := parsePost(postData["data"].(map[string]interface{})["children"].([]interface{})[0].(json.RawMessage))
 	if err != nil {
 		http.Error(w, "Failed to parse post", http.StatusInternalServerError)
 		return
 	}
+
 
 	if post.NSFW && shouldBeNSFWGated(r, url) {
 		nsfwLanding(w, r, url)

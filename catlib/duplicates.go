@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,46 +45,6 @@ func quarantineResponse(w http.ResponseWriter, r *http.Request, sub, reason stri
 	http.Error(w, fmt.Sprintf("Subreddit %s is %s", sub, reason), http.StatusForbidden)
 }
 
-func parsePost(data interface{}) (*Post, error) {
-	postData, ok := data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("expected post data to be a map, got %T", data)
-	}
-	innerData, ok := postData["data"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("expected inner data to be a map, got %T", postData["data"])
-	}
-
-	id, _ := innerData["id"].(string)
-	title, _ := innerData["title"].(string)
-	subreddit, _ := innerData["subreddit"].(string)
-	authorName, _ := innerData["author"].(string)
-	permalink, _ := innerData["permalink"].(string)
-	bodyHTML, _ := innerData["selftext_html"].(string)
-	score, _ := innerData["score"].(float64)
-	upvoteRatio, _ := innerData["upvote_ratio"].(float64)
-	nsfw, _ := innerData["over_18"].(bool)
-	spoiler, _ := innerData["spoiler"].(bool)
-	stickied, _ := innerData["stickied"].(bool)
-	createdUTC, _ := innerData["created_utc"].(float64)
-
-	body := rewriteUrls(html.UnescapeString(bodyHTML))
-
-	return &Post{
-		ID:          id,
-		Title:       title,
-		Subreddit:   subreddit,
-		Author:      Author{Name: authorName},
-		Permalink:   permalink,
-		Body:        body,
-		Score:       fmt.Sprintf("%.0f", score),
-		UpvoteRatio: int64(upvoteRatio * 100),
-		NSFW:        nsfw,
-		Spoiler:     spoiler,
-		Stickied:    stickied,
-		CreatedUTC:  int64(createdUTC),
-	}, nil
-}
 
 // This is a placeholder for a proper template rendering engine.
 func template(w http.ResponseWriter, data interface{}) {
@@ -159,7 +119,7 @@ func duplicatesItem(w http.ResponseWriter, r *http.Request) {
 		errorResponse(w, r, "No post found in response")
 		return
 	}
-	post, err := parsePost(postChildren[0])
+	post, err := parsePost(postChildren[0].(json.RawMessage))
 	if err != nil {
 		errorResponse(w, r, fmt.Sprintf("Failed to parse post: %v", err))
 		return
@@ -258,7 +218,7 @@ func parseDuplicates(jsonValue map[string]interface{}, filters map[string]struct
 
 	var duplicates []*Post
 	for _, child := range children {
-		post, err := parsePost(child)
+		post, err := parsePost(child.(json.RawMessage))
 		if err == nil {
 			duplicates = append(duplicates, post)
 		}

@@ -47,7 +47,7 @@ func main() {
 	mux.HandleFunc("/info/", instanceInfoHandler) // Handle .ext
 
 	// Start server
-	log.Printf("Starting Catlib server on %s", *addr)
+	log.Printf("Starting Catlib server on %s (Git Hash: %s)", *addr, GitHash)
 	if err := http.ListenAndServe(*addr, mux); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
